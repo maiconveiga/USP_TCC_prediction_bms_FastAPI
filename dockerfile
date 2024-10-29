@@ -1,17 +1,17 @@
-# Use Python 3.10 para garantir compatibilidade
-FROM python:3.10-slim
+# Use a imagem Python
+FROM python:3.9
 
-# Define o diretório de trabalho no contêiner
+# Defina o diretório de trabalho
 WORKDIR /app
 
-# Copia todos os arquivos para o contêiner
+# Copie os arquivos necessários para o container
 COPY . /app
 
-# Instala as dependências
+# Instale as dependências
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Expõe a porta usada pela FastAPI
+# Exponha a porta que o Uvicorn usará
 EXPOSE 8000
 
-# Comando para iniciar a aplicação
-CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "$PORT"]
+# Comando para rodar a aplicação
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8000"]
