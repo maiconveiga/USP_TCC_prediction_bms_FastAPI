@@ -9,6 +9,14 @@ from datetime import datetime, timedelta
 
 app = FastAPI()
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],  # Substitua por ["http://localhost:3000"] em produção para maior segurança
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
 # Variáveis de configuração
 cidade = "Rio de Janeiro"
 api_key = "af14a5d98cd1cc1fc38ce560697d2727"
