@@ -135,4 +135,4 @@ async def previsao_chiller(dados: PrevisaoInput):
 
 @app.get("/")
 async def root():
-    return {"message": "Hello, Render!"}
+    return {"message": "API em operação"}
