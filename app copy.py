@@ -71,29 +71,6 @@ def obter_dados_climaticos():
             raise HTTPException(status_code=500, detail=f"Erro ao obter dados climáticos: {e}")
     return dados_clima_cache
 
-
-def obter_previsao_climatica(cidade):
-    url = f'https://api.openweathermap.org/data/2.5/forecast?q={cidade}&lang=pt_br&appid={api_key}&units=metric'
-    response = requests.get(url, verify=False)
-    
-    if response.status_code == 200:
-        dados = response.json()  
-        
-        dados_filtrados = [
-            {
-                "UTCDateTime": registro["dt"],
-                "temperatura": registro["main"]["temp"],
-                "pressao": registro["main"]["pressure"],
-                "umidade": registro["main"]["humidity"]
-            }
-            for registro in dados["list"]
-        ]
-        
-        return dados_filtrados  # Retorna o dicionário direto como JSON
-    else:
-        return None
-
-
 # Classe de entrada
 class PrevisaoInput(BaseModel):
     ur_temp_saida: float
@@ -127,7 +104,7 @@ def calcular_previsoes(scaler, model, *args):
     return model.predict(input_data_scaled).flatten()[0]
 
 # Endpoint único para previsões dos Chillers 1 e 2
-@app.post("/atual/chiller", response_model=PrevisaoOutput)
+@app.post("/previsao/chiller", response_model=PrevisaoOutput)
 async def previsao_chiller(dados: PrevisaoInput):
     try:
         if dados.chiller not in [1, 2]:
@@ -169,91 +146,3 @@ async def previsao_chiller(dados: PrevisaoInput):
 @app.get("/")
 async def root():
     return {"message": "API em operação"}
-
-@app.get('/previsaoClima')
-def preverClima():
-    previsaoCLima = obter_previsao_climatica(cidade)
-    return previsaoCLima
-
-@app.post("/forecast/chiller", response_model=list[PrevisaoOutput])
-async def previsao_chiller(dados: PrevisaoInput):
-    try:
-        if dados.chiller not in [1, 2]:
-            raise HTTPException(status_code=400, detail="Chiller inválido. Escolha 1 ou 2.")
-
-        # Obtém a previsão climática para a cidade
-        previsao_clima = obter_previsao_climatica(cidade)
-
-        if not previsao_clima:
-            raise HTTPException(status_code=500, detail="Erro ao obter previsão climática.")
-
-        # Carrega os modelos e scalers
-        modelos_scalers = carregar_modelos_scalers(dados.chiller)
-        
-        previsoes = []
-
-        # Itera sobre cada previsão de clima
-        for clima in previsao_clima:
-            pressao = clima["pressao"]
-            umidade = clima["umidade"]
-            temperatura = clima["temperatura"]
-            fim_de_semana, horario_comercial = verificar_data_horario()
-
-            previsaoLigados = calcular_previsoes(
-                modelos_scalers['ligados'][1], modelos_scalers['ligados'][0], 
-                pressao, temperatura, umidade, fim_de_semana, horario_comercial
-            )
-            previsaoVAG = calcular_previsoes(
-                modelos_scalers['vag'][1], modelos_scalers['vag'][0], 
-                pressao, temperatura, umidade, fim_de_semana, horario_comercial, previsaoLigados
-            )
-            previsaodeltaAC = calcular_previsoes(
-                modelos_scalers['deltaAC'][1], modelos_scalers['deltaAC'][0], 
-                pressao, temperatura, umidade, dados.ur_temp_saida, previsaoVAG, previsaoLigados
-            )
-            previsaoTorre3 = calcular_previsoes(
-                modelos_scalers['torre3'][1], modelos_scalers['torre3'][0], 
-                pressao, temperatura, umidade, previsaodeltaAC, previsaoVAG
-            )
-            previsaoTR = calcular_previsoes(
-                modelos_scalers['TR'][1], modelos_scalers['TR'][0], 
-                pressao, temperatura, umidade, previsaodeltaAC, previsaoVAG, 
-                dados.ur_temp_saida, fim_de_semana, horario_comercial, previsaoLigados, previsaoTorre3
-            )
-            previsaoKWH = calcular_previsoes(
-                modelos_scalers['KWH'][1], modelos_scalers['KWH'][0], 
-                pressao, temperatura, umidade, previsaodeltaAC, previsaoTR, 
-                dados.ur_temp_saida, previsaoVAG, previsaoTorre3, previsaoLigados
-            )
-            previsaoCorrente = calcular_previsoes(
-                modelos_scalers['corrente'][1], modelos_scalers['corrente'][0], 
-                pressao, temperatura, umidade, dados.ur_temp_saida, previsaoTR, 
-                previsaodeltaAC, previsaoVAG, previsaoLigados, previsaoKWH, previsaoTorre3
-            )
-
-            # Formata a data e hora para o retorno
-            data_hora = datetime.utcfromtimestamp(clima["UTCDateTime"]).strftime("%Y-%m-%d %H:%M:%S")
-
-            # Adiciona a previsão do dia à lista
-            previsoes.append(
-                PrevisaoOutput(
-                    corrente=previsaoCorrente,
-                    vag=previsaoVAG,
-                    ligados=previsaoLigados,
-                    delta_ac=previsaodeltaAC,
-                    tr=previsaoTR,
-                    kwh=previsaoKWH,
-                    torre=previsaoTorre3,
-                    temperatura=temperatura,
-                    pressao=pressao,
-                    umidade=umidade,
-                    horario_comercial=horario_comercial,
-                    fim_de_semana=fim_de_semana,
-                    data_hora=data_hora
-                )
-            )
-
-        return previsoes  # Retorna a lista de previsões diárias
-
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
