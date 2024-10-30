@@ -132,3 +132,7 @@ async def previsao_chiller(dados: PrevisaoInput):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/")
+async def root():
+    return {"message": "Hello, Render!"}
