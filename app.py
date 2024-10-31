@@ -116,6 +116,11 @@ class PrevisaoOutput(BaseModel):
     data_hora: str  # Campo para data e hora
 
 # Função para verificar se é final de semana e horário comercial
+def verificar_data_horario_prev(data_hora_prev):
+    data_hora_prev = datetime.strptime(data_hora_prev, '%Y-%m-%d %H:%M:%S')
+    return 1 if data_hora_prev.weekday() >= 5 else 0, 1 if 8 <= data_hora_prev.hour < 17 else 0
+
+
 def verificar_data_horario():
     data_hora = datetime.now()
     return 1 if data_hora.weekday() >= 5 else 0, 1 if 8 <= data_hora.hour < 17 else 0
@@ -126,8 +131,25 @@ def calcular_previsoes(scaler, model, *args):
     input_data_scaled = scaler.transform(input_data)
     return model.predict(input_data_scaled).flatten()[0]
 
+@app.get("/")
+async def root():
+    return {"message": "API em operação"}
+
+
+@app.get('/actual/weather')
+def preverClima():
+    previsaoCLima = obter_previsao_climatica(cidade)
+    return previsaoCLima
+
+
+@app.get('/forecast/weather')
+def preverClima():
+    previsaoCLima = obter_previsao_climatica(cidade)
+    return previsaoCLima
+
+
 # Endpoint único para previsões dos Chillers 1 e 2
-@app.post("/atual/chiller", response_model=PrevisaoOutput)
+@app.post("/actual/chiller", response_model=PrevisaoOutput)
 async def previsao_chiller(dados: PrevisaoInput):
     try:
         if dados.chiller not in [1, 2]:
@@ -166,15 +188,6 @@ async def previsao_chiller(dados: PrevisaoInput):
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
-@app.get("/")
-async def root():
-    return {"message": "API em operação"}
-
-@app.get('/previsaoClima')
-def preverClima():
-    previsaoCLima = obter_previsao_climatica(cidade)
-    return previsaoCLima
-
 @app.post("/forecast/chiller", response_model=list[PrevisaoOutput])
 async def previsao_chiller(dados: PrevisaoInput):
     try:
@@ -194,10 +207,12 @@ async def previsao_chiller(dados: PrevisaoInput):
 
         # Itera sobre cada previsão de clima
         for clima in previsao_clima:
+
+            data_hora_prev = datetime.utcfromtimestamp(clima["UTCDateTime"]).strftime("%Y-%m-%d %H:%M:%S")
             pressao = clima["pressao"]
             umidade = clima["umidade"]
             temperatura = clima["temperatura"]
-            fim_de_semana, horario_comercial = verificar_data_horario()
+            fim_de_semana, horario_comercial = verificar_data_horario_prev(data_hora_prev)
 
             previsaoLigados = calcular_previsoes(
                 modelos_scalers['ligados'][1], modelos_scalers['ligados'][0], 
@@ -232,7 +247,6 @@ async def previsao_chiller(dados: PrevisaoInput):
             )
 
             # Formata a data e hora para o retorno
-            data_hora = datetime.utcfromtimestamp(clima["UTCDateTime"]).strftime("%Y-%m-%d %H:%M:%S")
 
             # Adiciona a previsão do dia à lista
             previsoes.append(
@@ -249,7 +263,7 @@ async def previsao_chiller(dados: PrevisaoInput):
                     umidade=umidade,
                     horario_comercial=horario_comercial,
                     fim_de_semana=fim_de_semana,
-                    data_hora=data_hora
+                    data_hora=data_hora_prev
                 )
             )
 
@@ -257,3 +271,4 @@ async def previsao_chiller(dados: PrevisaoInput):
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
